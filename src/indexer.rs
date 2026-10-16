@@ -400,9 +400,9 @@ pub fn detect_project_type(root: &Path) -> ProjectType {
     let has_frontend = root.join("package.json").exists();
 
     // Python project detection
-    let has_python = root.join("pyproject.toml").exists()
-        || root.join("setup.py").exists()
-        || root.join("setup.cfg").exists();
+    let has_python = PYTHON_STACK_MARKER_NAMES
+        .iter()
+        .any(|name| root.join(name).exists());
 
     // Go project detection
     let has_go = root.join("go.mod").exists();
@@ -642,6 +642,26 @@ fn is_under_fixture_dir(relative: &str) -> bool {
         .any(|segment| STACK_FIXTURE_DIR_SEGMENTS.contains(segment))
 }
 
+/// Python project markers beyond the classic `pyproject.toml` / `setup.py` /
+/// `setup.cfg` trio: pip-tools, pipenv and poetry manifests, pyenv version pin
+/// and test tooling configs. Many real-world projects (especially pip-tools /
+/// uv workflows) ship only `requirements*.txt/in` and `pytest.ini`.
+/// Note: `.python-version` is a hidden file — the bounded walk skips hidden
+/// entries, but the root-level marker check below still finds it in the root.
+const PYTHON_STACK_MARKER_NAMES: &[&str] = &[
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "requirements.txt",
+    "requirements.in",
+    "Pipfile",
+    "Pipfile.lock",
+    "poetry.lock",
+    "pytest.ini",
+    "tox.ini",
+    ".python-version",
+];
+
 const ROOT_STACK_MARKER_NAMES: &[&str] = &[
     "settings.gradle.kts",
     "settings.gradle",
@@ -668,6 +688,14 @@ const ROOT_STACK_MARKER_NAMES: &[&str] = &[
     "pyproject.toml",
     "setup.py",
     "setup.cfg",
+    "requirements.txt",
+    "requirements.in",
+    "Pipfile",
+    "Pipfile.lock",
+    "poetry.lock",
+    "pytest.ini",
+    "tox.ini",
+    ".python-version",
     "go.mod",
     "pubspec.yaml",
     "composer.json",
@@ -1081,7 +1109,7 @@ fn detect_stacks_with_limits(
         });
     }
 
-    let python_markers = collect_markers(entries, &["pyproject.toml", "setup.py", "setup.cfg"]);
+    let python_markers = collect_markers(entries, PYTHON_STACK_MARKER_NAMES);
     if !python_markers.is_empty() {
         stacks.push(DetectedStack {
             kind: "python".to_string(),

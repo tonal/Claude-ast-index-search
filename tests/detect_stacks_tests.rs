@@ -221,3 +221,71 @@ fn kmp_plugin_and_source_set_in_different_gradle_modules_are_not_combined() {
     assert!(!result.is_kmp, "cross-module markers must be ambiguous");
     assert!(!result.is_polyglot);
 }
+
+#[test]
+fn requirements_based_python_project_is_detected() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    // Typical pip-tools / pyenv project without pyproject.toml or setup.py.
+    fs::write(root.join("requirements.txt"), "mongoengine>=0.27\n").unwrap();
+    fs::write(root.join("pytest.ini"), "[pytest]\n").unwrap();
+    fs::write(root.join(".python-version"), "3.11\n").unwrap();
+
+    let result = detect_stacks(root);
+
+    assert_eq!(kinds(&result), vec!["python"]);
+    // Markers follow the candidate order of PYTHON_STACK_MARKER_NAMES.
+    assert_eq!(
+        result.stacks[0].markers,
+        vec![
+            "requirements.txt".to_string(),
+            "pytest.ini".to_string(),
+            ".python-version".to_string(),
+        ]
+    );
+    assert!(!result.is_polyglot);
+}
+
+#[test]
+fn pipenv_and_tox_markers_are_detected_as_python() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    fs::write(root.join("Pipfile"), "[packages]\nrequests = \"*\"\n").unwrap();
+    fs::write(root.join("Pipfile.lock"), "{}").unwrap();
+    fs::write(root.join("tox.ini"), "[tox]\nenvlist = py311\n").unwrap();
+
+    let result = detect_stacks(root);
+
+    assert_eq!(kinds(&result), vec!["python"]);
+    assert_eq!(
+        result.stacks[0].markers,
+        vec![
+            "Pipfile".to_string(),
+            "Pipfile.lock".to_string(),
+            "tox.ini".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn pyproject_python_project_keeps_legacy_marker_order() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+
+    fs::write(
+        root.join("pyproject.toml"),
+        "[project]\nname = \"x\"\nversion = \"0\"\n",
+    )
+    .unwrap();
+    fs::write(root.join("requirements.txt"), "requests\n").unwrap();
+
+    let result = detect_stacks(root);
+
+    assert_eq!(kinds(&result), vec!["python"]);
+    assert_eq!(
+        result.stacks[0].markers,
+        vec!["pyproject.toml".to_string(), "requirements.txt".to_string()]
+    );
+}
